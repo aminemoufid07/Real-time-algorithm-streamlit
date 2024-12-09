@@ -215,7 +215,6 @@ hyperperiod = math.prod([task[3] for task in tasks])
 
 
 
-
 if st.button("Simulate"):
     gantt_chart = []  # Initialize to avoid NameError
     waiting_times = {}  # Initialize to handle all algorithms
@@ -223,95 +222,83 @@ if st.button("Simulate"):
     missed_deadlines = []  # Default for Rate Monotonic Scheduling
 
     if algorithm == "FCFS (First Come First Serve)":
-     gantt_chart, waiting_times = fcfs_scheduling(tasks)
-     avg_waiting_time = sum(waiting_times.values()) / len(waiting_times)
+        gantt_chart, waiting_times = fcfs_scheduling(tasks)
+        avg_waiting_time = sum(waiting_times.values()) / len(waiting_times)
 
     elif algorithm == "SJF Preemptive":
-        gantt_chart, waiting_times,  avg_waiting_time = preemptive_sjf(tasks)
+        gantt_chart, waiting_times, avg_waiting_time = preemptive_sjf(tasks)
+
     elif algorithm == "SJF Non-Preemptive":
         gantt_chart, waiting_times, avg_waiting_time = non_preemptive_sjf(tasks)
-    elif algorithm == "Rate Monotonic":
-     tasks_with_periods = [(task["name"], task["burst_time"], task["period"]) for task in st.session_state.tasks]
-     gantt_chart, waiting_times= rate_monotonic_scheduling(tasks_with_periods, hyper_period=20)
 
-    # Calculate average waiting time
-    avg_waiting_time = sum(waiting_times.values()) / len(waiting_times)
+    elif algorithm == "Rate Monotonic":
+        tasks_with_periods = [(task["name"], task["burst_time"], task["period"]) for task in st.session_state.tasks]
+        gantt_chart, waiting_times = rate_monotonic_scheduling(tasks_with_periods, hyper_period=20)
 
     # Assign a unique color for each task
     task_colors = {task[0]: plt.cm.tab10(i) for i, task in enumerate(tasks)}
 
-   # Combined Individual Diagrams
-st.subheader("Individual Task Execution Timeline")
-fig, ax = plt.subplots(figsize=(10, len(tasks) * 1.5))
+    # Combined Individual Diagrams
+    st.subheader("Individual Task Execution Timeline")
+    fig, ax = plt.subplots(figsize=(10, len(tasks) * 1.5))
 
-# Set a unique color for each task
-task_colors = {task_name: plt.cm.tab10(i) for i, task_name in enumerate(set([task[0] for task in gantt_chart]))}
+    # Set a unique color for each task
+    task_colors = {task_name: plt.cm.tab10(i) for i, task_name in enumerate(set([task[0] for task in gantt_chart]))}
 
-# Plot individual task execution timeline with merged blocks
-for i, task_name in enumerate(task_colors.keys()):
-    for segment in [t for t in gantt_chart if t[0] == task_name]:  # Find all segments for the task
-        _, start_time, end_time = segment
-        ax.barh(task_name, end_time - start_time, left=start_time, color=task_colors[task_name], edgecolor="black")
-        ax.text((start_time + end_time) / 2, i, f"{end_time - start_time}", ha="center", va="center", color="white")
+    # Plot individual task execution timeline
+    for task_name in task_colors.keys():
+        for segment in [t for t in gantt_chart if t[0] == task_name]:
+            _, start_time, end_time = segment
+            ax.barh(task_name, end_time - start_time, left=start_time, color=task_colors[task_name], edgecolor="black")
+            ax.text((start_time + end_time) / 2, task_name, f"{end_time - start_time}", ha="center", va="center", color="white")
 
-ax.set_xlim(0, sum([task[2] for task in tasks]) + 5)  # Adjust x-axis limit for clarity
-ax.set_xlabel("Time")
-ax.set_ylabel("Tasks")
-ax.set_title("Execution Timeline for Individual Tasks")
-st.pyplot(fig)
-# Gantt Chart
-st.subheader("Gantt Chart")
-fig, ax = plt.subplots(figsize=(10, 4))
+    ax.set_xlim(0, sum([task[2] for task in tasks]) + 5)  # Adjust x-axis limit for clarity
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Tasks")
+    ax.set_title("Execution Timeline for Individual Tasks")
+    st.pyplot(fig)
 
-# Initialize a list to keep track of merged task blocks
-merged_blocks = []
-current_task = None
-current_start = None
-current_end = None
+    # Gantt Chart
+    st.subheader("Gantt Chart")
+    fig, ax = plt.subplots(figsize=(10, 4))
 
-# Merge consecutive identical tasks and sum their durations
-for task_name, start_time, end_time in gantt_chart:
-    if task_name == current_task:
-        # If it's the same task as the previous one, extend the end time
-        current_end = end_time
-    else:
-        if current_task is not None:
-            # If we finished a block, add it to merged_blocks
-            merged_blocks.append((current_task, current_start, current_end))
-        # Start a new block for the new task
-        current_task = task_name
-        current_start = start_time
-        current_end = end_time
+    # Merge consecutive identical tasks and sum their durations
+    merged_blocks = []
+    current_task = None
+    current_start = None
+    current_end = None
 
-# Add the last block to the merged_blocks list
-if current_task is not None:
-    merged_blocks.append((current_task, current_start, current_end))
+    for task_name, start_time, end_time in gantt_chart:
+        if task_name == current_task:
+            current_end = end_time
+        else:
+            if current_task is not None:
+                merged_blocks.append((current_task, current_start, current_end))
+            current_task = task_name
+            current_start = start_time
+            current_end = end_time
 
-# Plot the merged blocks with the same color as individual tasks
-for task_name, start_time, end_time in merged_blocks:
-    ax.barh("Tasks", end_time - start_time, left=start_time, color=task_colors[task_name], edgecolor="black")
-    # Add block duration instead of task names
-    ax.text((start_time + end_time) / 2, 0, str(end_time - start_time), ha="center", va="center", color="white")
+    if current_task is not None:
+        merged_blocks.append((current_task, current_start, current_end))
 
-# Set the chart labels and title
-ax.set_xlabel("Time")
-ax.set_title("Gantt Chart")
+    for task_name, start_time, end_time in merged_blocks:
+        ax.barh("Tasks", end_time - start_time, left=start_time, color=task_colors[task_name], edgecolor="black")
+        ax.text((start_time + end_time) / 2, 0, str(end_time - start_time), ha="center", va="center", color="white")
 
-# Remove the legend section
-# ax.legend(handles, labels)  # Comment or remove this line
+    ax.set_xlabel("Time")
+    ax.set_title("Gantt Chart")
+    st.pyplot(fig)
 
-st.pyplot(fig)
+    # Waiting Times and Results
+    st.subheader("Waiting Times")
+    results = pd.DataFrame({
+        "Task": [task[0] for task in tasks],
+        "Arrival Time": [task[1] for task in tasks],
+        "Burst Time": [task[2] for task in tasks],
+        "Waiting Time": [waiting_times[task[0]] for task in tasks],
+    })
+    st.table(results)
 
-# Waiting Times and Results
-st.subheader("Waiting Times")
-results = pd.DataFrame({
-    "Task": [task[0] for task in tasks],
-    "Arrival Time": [task[1] for task in tasks],
-    "Burst Time": [task[2] for task in tasks],
-    "Waiting Time": [waiting_times[task[0]] for task in tasks],
-})
-st.table(results)
-
-# Average Waiting Time
-st.subheader("Average Waiting Time")
-st.write(f"The average waiting time is: {avg_waiting_time:.2f}")
+    # Average Waiting Time
+    st.subheader("Average Waiting Time")
+    st.write(f"The average waiting time is: {avg_waiting_time:.2f}")
