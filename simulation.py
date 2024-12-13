@@ -173,8 +173,161 @@ def rate_monotonic_scheduling(tasks, hyper_period=20):
     return gantt_chart, waiting_times
 
 
+def edf_scheduling(tasks, hyper_period=20):
+    """
+    EDF Scheduling.
+    """
+    # Sort tasks by deadline (latest first)
+    tasks.sort(key=lambda x: x[4], reverse=True)  # Sort by deadline (latest first)
+    current_time = 0
+    gantt_chart = []
+    remaining_burst = {task[0]: task[2] for task in tasks}  # Remaining burst time for each task
+    deadlines = {task[0]: task[4] for task in tasks}  # Deadlines for each task (from task's deadline)
+    waiting_times = {task[0]: 0 for task in tasks}  # Waiting time for each task
+    task_start_time = {task[0]: None for task in tasks}  # Track start times of tasks
+    task_finish_time = {task[0]: None for task in tasks}  # Track finish times of tasks
+    missed_deadlines = []
 
+    while current_time < hyper_period:
+        # Refresh tasks at the start of their periods
+        for task_name, arrival_time, burst_time, period, deadline in tasks:
+            if current_time % period == 0:
+                if remaining_burst[task_name] > 0 and current_time > deadlines[task_name]:  # Missed deadline
+                    missed_deadlines.append((task_name, current_time))
+                remaining_burst[task_name] = burst_time  # Reset burst time for the task
+                deadlines[task_name] = current_time + period  # Update deadline
 
+        # Select the task with the latest deadline (highest priority)
+        ready_tasks = [
+            task for task in tasks if remaining_burst[task[0]] > 0 and current_time < deadlines[task[0]]
+        ]
+
+        if ready_tasks:
+            # Sort tasks by their deadline (latest first)
+            ready_tasks.sort(key=lambda x: deadlines[x[0]], reverse=True)
+
+            # Execute the task with the latest deadline
+            next_task = ready_tasks[0]
+            task_name = next_task[0]
+
+            # If it's the first time this task is starting, record the start time
+            if task_start_time[task_name] is None:
+                task_start_time[task_name] = current_time
+
+            # Add this task to the gantt chart
+            gantt_chart.append((task_name, current_time, current_time + 1))
+
+            # Decrement remaining burst time of the task
+            remaining_burst[task_name] -= 1
+
+            # If task finishes, record finish time
+            if remaining_burst[task_name] == 0:
+                task_finish_time[task_name] = current_time + 1
+        else:
+            # Idle time if no tasks are ready
+            gantt_chart.append(("Idle", current_time, current_time + 1))
+
+        # Update waiting times for tasks that are ready to run
+        for task_name in remaining_burst:
+            if remaining_burst[task_name] > 0 and current_time < deadlines[task_name]:
+                waiting_times[task_name] += 1
+
+        current_time += 1
+
+    # Calculate the final waiting time for each task
+    for task_name in tasks:
+        # If the task was executed at least once, calculate the waiting time
+        if task_start_time[task_name[0]] is not None and task_finish_time[task_name[0]] is not None:
+            total_time_in_system = task_finish_time[task_name[0]] - task_start_time[task_name[0]]
+            preemptive_time = task_finish_time[task_name[0]] - task_start_time[task_name[0]]
+            waiting_times[task_name[0]] = (
+                task_start_time[task_name[0]] - task_name[1] + (total_time_in_system - preemptive_time)
+            )
+
+    # Calculate average waiting time
+    average_waiting_time = sum(waiting_times.values()) / len(waiting_times)
+    
+    return gantt_chart, waiting_times, average_waiting_time
+
+def llf_scheduling(tasks, hyper_period=20):
+    """
+    Least Laxity First (LLF) Scheduling with fixed Gantt chart handling.
+    """
+    current_time = 0
+    gantt_chart = []
+    remaining_burst = {task[0]: task[2] for task in tasks}  # Remaining burst time for each task
+    deadlines = {task[0]: task[4] for task in tasks}  # Deadlines for each task (from task's deadline)
+    waiting_times = {task[0]: 0 for task in tasks}  # Waiting time for each task
+    task_start_time = {task[0]: None for task in tasks}  # Track start times of tasks
+    task_finish_time = {task[0]: None for task in tasks}  # Track finish times of tasks
+    missed_deadlines = []
+
+    while current_time < hyper_period:
+        # Refresh tasks at the start of their periods
+        for task_name, arrival_time, burst_time, period, deadline in tasks:
+            if current_time % period == 0:
+                if remaining_burst[task_name] > 0 and current_time > deadlines[task_name]:  # Missed deadline
+                    missed_deadlines.append((task_name, current_time))
+                remaining_burst[task_name] = burst_time  # Reset burst time for the task
+                deadlines[task_name] = current_time + period  # Update deadline
+
+        # Calculate laxity for each task and select the task with the least laxity
+        ready_tasks = [
+            task for task in tasks if remaining_burst[task[0]] > 0 and current_time < deadlines[task[0]]
+        ]
+
+        if ready_tasks:
+            # Calculate laxity for each ready task
+            ready_tasks_with_laxity = [
+                (task, deadlines[task[0]] - current_time - remaining_burst[task[0]]) 
+                for task in ready_tasks
+            ]
+            
+            # Sort tasks by laxity (ascending order: least laxity first)
+            ready_tasks_with_laxity.sort(key=lambda x: x[1])
+
+            # Get the task with the least laxity
+            next_task = ready_tasks_with_laxity[0][0]
+            task_name = next_task[0]
+
+            # If it's the first time this task is starting, record the start time
+            if task_start_time[task_name] is None:
+                task_start_time[task_name] = current_time
+
+            # Add this task to the gantt chart
+            gantt_chart.append((task_name, current_time, current_time + 1))
+
+            # Decrement remaining burst time of the task
+            remaining_burst[task_name] -= 1
+
+            # If task finishes, record finish time
+            if remaining_burst[task_name] == 0:
+                task_finish_time[task_name] = current_time + 1
+        else:
+            # Idle time if no tasks are ready
+            gantt_chart.append(("Idle", current_time, current_time + 1))
+
+        # Update waiting times for tasks that are ready to run
+        for task_name in remaining_burst:
+            if remaining_burst[task_name] > 0 and current_time < deadlines[task_name]:
+                waiting_times[task_name] += 1
+
+        current_time += 1
+
+    # Calculate the final waiting time for each task
+    for task_name in tasks:
+        # If the task was executed at least once, calculate the waiting time
+        if task_start_time[task_name[0]] is not None and task_finish_time[task_name[0]] is not None:
+            total_time_in_system = task_finish_time[task_name[0]] - task_start_time[task_name[0]]
+            preemptive_time = task_finish_time[task_name[0]] - task_start_time[task_name[0]]
+            waiting_times[task_name[0]] = (
+                task_start_time[task_name[0]] - task_name[1] + (total_time_in_system - preemptive_time)
+            )
+
+    # Calculate average waiting time
+    average_waiting_time = sum(waiting_times.values()) / len(waiting_times)
+    
+    return gantt_chart, waiting_times, average_waiting_time
 
 
 # Streamlit UI
@@ -183,7 +336,7 @@ st.write("Choose an algorithm and input tasks to see the Gantt chart and perform
 
 algorithm = st.selectbox(
     "Select Scheduling Algorithm",
-    ["FCFS (First Come First Serve)", "SJF Preemptive", "SJF Non-Preemptive", "Rate Monotonic"]
+    ["FCFS (First Come First Serve)", "SJF Preemptive", "SJF Non-Preemptive", "Rate Monotonic","Earliest Deadline First (EDF)","LLF scheduling"]
 )
 
 num_tasks = st.number_input("Number of tasks", min_value=1, max_value=10, value=3, step=1)
@@ -192,7 +345,7 @@ if "tasks" not in st.session_state or len(st.session_state.tasks) != num_tasks:
     st.session_state.tasks = [{"name": f"Task {i+1}", "arrival_time": 0, "burst_time": 1} for i in range(num_tasks)]
 
 for i, task in enumerate(st.session_state.tasks):
-    cols = st.columns(4)
+    cols = st.columns(5)
     with cols[0]:
         task["name"] = st.text_input(f"Name of Task {i + 1}", value=task["name"], key=f"name_{i}")
     with cols[1]:
@@ -201,9 +354,17 @@ for i, task in enumerate(st.session_state.tasks):
         task["burst_time"] = st.number_input(f"Burst Time of Task {i + 1}", min_value=1, value=task["burst_time"], key=f"burst_{i}")
     with cols[3]:
         task["period"] = st.number_input(f"Period of Task {i + 1}", min_value=1, value=task.get("period", 10), key=f"period_{i}")
+    if algorithm == "Earliest Deadline First (EDF)":
+     with cols[4]:
+            task["deadline"] = st.number_input(f"Deadline of Task {i + 1}", min_value=1, value=task.get("deadline", 10), key=f"deadline_{i}")
+    if algorithm == "LLF scheduling":
+     with cols[4]:
+            task["deadline"] = st.number_input(f"Deadline of Task {i + 1}", min_value=1, value=task.get("deadline", 10), key=f"deadline_{i}")
 
-tasks = [ (task["name"], task["arrival_time"], task["burst_time"], task["period"])
-    for task in st.session_state.tasks]
+tasks = [(task["name"], task["arrival_time"], task["burst_time"], task.get("period", 10), task.get("deadline", 10)) for task in st.session_state.tasks]
+
+# tasks = [ (task["name"], task["arrival_time"], task["burst_time"], task["period"])
+#     for task in st.session_state.tasks]
 
 # Determine hyperperiod
 import math
@@ -234,6 +395,12 @@ if st.button("Simulate"):
     elif algorithm == "Rate Monotonic":
         tasks_with_periods = [(task["name"], task["burst_time"], task["period"]) for task in st.session_state.tasks]
         gantt_chart, waiting_times = rate_monotonic_scheduling(tasks_with_periods, hyper_period=20)
+    elif algorithm == "Earliest Deadline First (EDF)":
+      gantt_chart, waiting_times, avg_waiting_time = edf_scheduling(tasks, hyper_period=20)
+    elif algorithm == "LLF scheduling":
+     gantt_chart, waiting_times, avg_waiting_time = llf_scheduling(tasks, hyper_period=20)
+
+ 
 
     # Assign a unique color for each task
     task_colors = {task[0]: plt.cm.tab10(i) for i, task in enumerate(tasks)}
@@ -287,6 +454,7 @@ if st.button("Simulate"):
 
     ax.set_xlabel("Time")
     ax.set_title("Gantt Chart")
+    ax.set_xlim(0, sum([task[2] for task in tasks]) + 5) 
     st.pyplot(fig)
 
     # Waiting Times and Results
@@ -302,3 +470,5 @@ if st.button("Simulate"):
     # Average Waiting Time
     st.subheader("Average Waiting Time")
     st.write(f"The average waiting time is: {avg_waiting_time:.2f}")
+
+   
